@@ -1,19 +1,21 @@
 {
   "name": "convex-oss-blog",
   "version": "1.0.0",
-  "main": "index.js",
   "scripts": {
-    "test": "echo \"Error: no test specified\" && exit 1"
+    "dev": "convex dev --tail-logs",
+    "step": "shx cp step-${npm_config_num}/convex.json convex.json"
   },
-  "author": "",
-  "license": "ISC",
-  "description": "",
   "dependencies": {
     "convex": "^1.17.3",
     "convex-helpers": "^0.1.66",
-    "octokit": "^4.0.2"
+    "octokit": "^4.0.2",
+    "p-limit": "^6.1.0",
+    "remeda": "^2.17.4"
   },
   "devDependencies": {
-    "@types/node": "^22.10.1"
-  }
+    "@types/node": "^22.10.1",
+    "shx": "^0.3.4"
+  },
+  "type": "module",
+  "private": true
 }
