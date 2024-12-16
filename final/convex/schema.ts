@@ -1,9 +1,7 @@
-// step 02
+// step 03
 
 import { defineSchema, defineTable } from "convex/server";
 import { v } from "convex/values";
-
-export const t = () => {};
 
 export default defineSchema({
   githubOwners: defineTable({

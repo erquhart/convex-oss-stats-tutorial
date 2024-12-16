@@ -3,9 +3,11 @@
   "version": "1.0.0",
   "scripts": {
     "dev": "convex dev --tail-logs",
-    "step": "shx cp step-${npm_config_num}/convex.json convex.json"
+    "step": "shx cp step-${npm_config_num}/convex.json convex.json && npm run dev",
+    "clear": "npx convex import --replace-all --table githubOwners --format jsonLines /dev/null -y"
   },
   "dependencies": {
+    "cheerio": "^1.0.0",
     "convex": "^1.17.3",
     "convex-helpers": "^0.1.66",
     "octokit": "^4.0.2",

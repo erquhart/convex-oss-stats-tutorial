@@ -1,36 +1,53 @@
-// step 02
-
 import { Octokit } from "octokit";
-import { internalAction } from "@/_generated/server";
+import { internalAction, internalMutation } from "@/_generated/server";
 import { v } from "convex/values";
+import { internal } from "@/_generated/api";
 
-export const updateGitHubOwnerStats = internalAction({
+export const updateGithubOwner = internalMutation({
+  args: {
+    name: v.string(),
+    starCount: v.number(),
+  },
+  handler: async (ctx, args) => {
+    const existingOwner = await ctx.db
+      .query("githubOwners")
+      .filter((q) => q.eq(q.field("name"), args.name))
+      .unique();
+
+    if (!existingOwner) {
+      await ctx.db.insert("githubOwners", {
+        name: args.name,
+        starCount: args.starCount,
+      });
+      return;
+    }
+
+    await ctx.db.patch(existingOwner._id, {
+      starCount: args.starCount,
+    });
+  },
+});
+
+export const updateGithubOwnerStats = internalAction({
   args: { owner: v.string() },
   handler: async (ctx, args) => {
     const octokit = new Octokit({ auth: process.env.GITHUB_ACCESS_TOKEN });
-    const { data: user } = await octokit.rest.users.getByUsername({
+    const iterator = octokit.paginate.iterator(octokit.rest.repos.listForUser, {
       username: args.owner,
+      per_page: 100,
     });
 
-    // Api calls can be different for users vs orgs
-    const isOrg = user.type === "Organization";
-    const iterator = isOrg
-      ? octokit.paginate.iterator(octokit.rest.repos.listForOrg, {
-          org: args.owner,
-          per_page: 100,
-        })
-      : octokit.paginate.iterator(octokit.rest.repos.listForUser, {
-          username: args.owner,
-          per_page: 100,
-        });
-
     let ownerStarCount = 0;
+
+    // Add an extra level of looping for the pages from the iterator
     for await (const { data: repos } of iterator) {
       for (const repo of repos) {
         ownerStarCount += repo.stargazers_count ?? 0;
       }
     }
-    console.log(`${args.owner} has ${ownerStarCount} stars`);
-    return ownerStarCount;
+    await ctx.runMutation(internal.stats.updateGithubOwner, {
+      name: args.owner,
+      starCount: ownerStarCount,
+    });
   },
 });
