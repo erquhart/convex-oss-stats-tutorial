@@ -2,9 +2,9 @@
   "name": "convex-oss-blog",
   "version": "1.0.0",
   "scripts": {
-    "dev": "convex dev --tail-logs",
-    "step": "shx cp step-${npm_config_num}/convex.json convex.json && npm run dev",
-    "clear": "npx convex import --replace-all --table githubOwners --format jsonLines /dev/null -y"
+    "dev": "shx rm convex.json && convex dev --tail-logs",
+    "step": "shx cp step-${npm_config_num}/convex.json convex.json && convex dev --tail-logs",
+    "clear-db": "npx convex import --replace-all --table githubOwners --format jsonLines /dev/null -y"
   },
   "dependencies": {
     "cheerio": "^1.0.0",

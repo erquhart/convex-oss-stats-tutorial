@@ -4,25 +4,41 @@ import { v } from "convex/values";
 import * as cheerio from "cheerio";
 import { internal } from "@/_generated/api";
 import { asyncMap } from "convex-helpers";
+import pLimit from "p-limit";
+
+const repoPageRetries = 3;
 
 const getGithubRepoPageData = async (owner: string, name: string) => {
-  const html = await fetch(`https://github.com/${owner}/${name}`).then((res) =>
-    res.text()
-  );
-  const $ = cheerio.load(html);
-  const parseNumber = (str = "") => Number(str.replace(/,/g, ""));
-  const selectData = (hrefSubstring: string) => {
-    const result = $(`a[href$="${hrefSubstring}"] > span.Counter`)
-      .filter((_, el) => {
-        const title = $(el).attr("title");
-        return !!parseNumber(title);
-      })
-      .attr("title");
-    return result ? parseNumber(result) : undefined;
-  };
+  // Some data, especially dependent count, randomly fails to load in the UI
+  let retries = repoPageRetries;
+  let contributorCount: number | undefined;
+  let dependentCount: number | undefined;
+  while (retries > 0) {
+    const html = await fetch(`https://github.com/${owner}/${name}`).then(
+      (res) => res.text()
+    );
+    const $ = cheerio.load(html);
+    const parseNumber = (str = "") => Number(str.replace(/,/g, ""));
+    const selectData = (hrefSubstring: string) => {
+      const result = $(`a[href$="${hrefSubstring}"] > span.Counter`)
+        .filter((_, el) => {
+          const title = $(el).attr("title");
+          return !!parseNumber(title);
+        })
+        .attr("title");
+      return result ? parseNumber(result) : undefined;
+    };
+    contributorCount = selectData("graphs/contributors");
+    dependentCount = selectData("network/dependents");
+    if (contributorCount === undefined || dependentCount === undefined) {
+      retries--;
+      continue;
+    }
+    break;
+  }
   return {
-    contributorCount: selectData("graphs/contributors") ?? 0,
-    dependentCount: selectData("network/dependents") ?? 0,
+    contributorCount: contributorCount ?? 0,
+    dependentCount: dependentCount ?? 0,
   };
 };
 
@@ -33,6 +49,8 @@ export const updateGithubRepos = internalMutation({
         owner: v.string(),
         name: v.string(),
         starCount: v.number(),
+        contributorCount: v.number(),
+        dependentCount: v.number(),
       })
     ),
   },
@@ -48,16 +66,10 @@ export const updateGithubRepos = internalMutation({
         return;
       }
       if (existingRepo) {
-        await ctx.db.patch(existingRepo._id, {
-          starCount: repo.starCount,
-        });
+        await ctx.db.patch(existingRepo._id, repo);
         return;
       }
-      await ctx.db.insert("githubRepos", {
-        ...repo,
-        contributorCount: 0,
-        dependentCount: 0,
-      });
+      await ctx.db.insert("githubRepos", repo);
     });
   },
 });
@@ -76,20 +88,11 @@ export const updateGithubOwner = internalMutation({
       .unique();
 
     if (!existingOwner) {
-      await ctx.db.insert("githubOwners", {
-        name: args.name,
-        starCount: args.starCount,
-        contributorCount: args.contributorCount,
-        dependentCount: args.dependentCount,
-      });
+      await ctx.db.insert("githubOwners", args);
       return;
     }
 
-    await ctx.db.patch(existingOwner._id, {
-      starCount: args.starCount,
-      contributorCount: args.contributorCount,
-      dependentCount: args.dependentCount,
-    });
+    await ctx.db.patch(existingOwner._id, args);
   },
 });
 
@@ -106,26 +109,41 @@ export const updateGithubOwnerStats = internalAction({
     let ownerContributorCount = 0;
     let ownerDependentCount = 0;
 
-    // Add an extra level of looping for the pages from the iterator
     for await (const { data: repos } of iterator) {
-      const reposWithPageData = [];
-      for (const repo of repos) {
-        const pageData = await getGithubRepoPageData(args.owner, repo.name);
-        console.log(repo.name, pageData);
-        ownerStarCount += repo.stargazers_count ?? 0;
-        ownerContributorCount += pageData.contributorCount ?? 0;
-        ownerDependentCount += pageData.dependentCount ?? 0;
-        reposWithPageData.push({
-          owner: repo.owner.login,
-          name: repo.name,
-          starCount: repo.stargazers_count ?? 0,
-          contributorCount: pageData.contributorCount,
-          dependentCount: pageData.dependentCount,
-        });
-      }
+      const repoLimit = pLimit(100);
+      const reposWithPageData = await Promise.all(
+        repos.map(async (repo) => {
+          return repoLimit(async () => {
+            const pageData = await getGithubRepoPageData(args.owner, repo.name);
+            return {
+              owner: args.owner,
+              name: repo.name,
+              starCount: repo.stargazers_count ?? 0,
+              contributorCount: pageData.contributorCount,
+              dependentCount: pageData.dependentCount,
+            };
+          });
+        })
+      );
+
       await ctx.runMutation(internal.stats.updateGithubRepos, {
         repos: reposWithPageData,
       });
+
+      ({ ownerStarCount, ownerContributorCount, ownerDependentCount } =
+        reposWithPageData.reduce(
+          (acc, repo) => ({
+            ownerStarCount: acc.ownerStarCount + repo.starCount,
+            ownerContributorCount:
+              acc.ownerContributorCount + repo.contributorCount,
+            ownerDependentCount: acc.ownerDependentCount + repo.dependentCount,
+          }),
+          {
+            ownerStarCount,
+            ownerContributorCount,
+            ownerDependentCount,
+          }
+        ));
     }
     await ctx.runMutation(internal.stats.updateGithubOwner, {
       name: args.owner,
