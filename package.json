@@ -3,7 +3,7 @@
   "version": "1.0.0",
   "scripts": {
     "dev": "shx rm convex.json && convex dev --tail-logs",
-    "step": "shx cp step-${npm_config_num}/convex.json convex.json && convex dev --tail-logs",
+    "step": "shx cp steps/step-${npm_config_num}/convex.json convex.json && convex dev --tail-logs",
     "clear-db": "npx convex import --replace-all --table githubOwners --format jsonLines /dev/null -y"
   },
   "dependencies": {
