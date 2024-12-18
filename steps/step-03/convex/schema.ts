@@ -5,7 +5,7 @@ export default defineSchema({
   githubOwners: defineTable({
     name: v.string(),
     starCount: v.number(),
-  }).index("name", ["name"]),
+  }),
   githubRepos: defineTable({
     owner: v.string(),
     name: v.string(),
