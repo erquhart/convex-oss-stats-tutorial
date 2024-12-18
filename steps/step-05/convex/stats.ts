@@ -1,4 +1,3 @@
-import { Octokit } from "octokit";
 import { internalAction, internalMutation } from "@/_generated/server";
 import { v } from "convex/values";
 import * as cheerio from "cheerio";
@@ -123,35 +122,51 @@ export const updateGithubOwner = internalMutation({
 });
 
 export const updateGithubOwnerStats = internalAction({
-  args: { owner: v.string() },
+  args: {
+    owner: v.string(),
+    page: v.optional(v.number()),
+  },
   handler: async (ctx, args) => {
-    const octokit = new Octokit({ auth: process.env.GITHUB_ACCESS_TOKEN });
-    const iterator = octokit.paginate.iterator(octokit.rest.repos.listForUser, {
-      username: args.owner,
-      per_page: 100,
+    const page = args.page ?? 1;
+    const response = await fetch(
+      `https://api.github.com/users/${args.owner}/repos?per_page=100&page=${page}`,
+      {
+        headers: {
+          Authorization: `Bearer ${process.env.GITHUB_ACCESS_TOKEN}`,
+        },
+      }
+    );
+    const repos: { name: string; stargazers_count: number }[] =
+      await response.json();
+
+    if (repos.length === 0) {
+      await ctx.runMutation(internal.stats.updateGithubOwner, {
+        name: args.owner,
+      });
+      return;
+    }
+
+    const repoLimit = pLimit(10);
+    const reposWithPageData = await asyncMap(repos, async (repo) => {
+      return repoLimit(async () => {
+        const pageData = await getGithubRepoPageData(args.owner, repo.name);
+        return {
+          owner: args.owner,
+          name: repo.name,
+          starCount: repo.stargazers_count ?? 0,
+          contributorCount: pageData.contributorCount,
+          dependentCount: pageData.dependentCount,
+        };
+      });
     });
 
-    for await (const { data: repos } of iterator) {
-      const repoLimit = pLimit(10);
-      const reposWithPageData = await asyncMap(repos, async (repo) => {
-        return repoLimit(async () => {
-          const pageData = await getGithubRepoPageData(args.owner, repo.name);
-          return {
-            owner: args.owner,
-            name: repo.name,
-            starCount: repo.stargazers_count ?? 0,
-            contributorCount: pageData.contributorCount,
-            dependentCount: pageData.dependentCount,
-          };
-        });
-      });
+    await ctx.runMutation(internal.stats.updateGithubRepos, {
+      repos: reposWithPageData,
+    });
 
-      await ctx.runMutation(internal.stats.updateGithubRepos, {
-        repos: reposWithPageData,
-      });
-    }
-    await ctx.runMutation(internal.stats.updateGithubOwner, {
-      name: args.owner,
+    await ctx.scheduler.runAfter(0, internal.stats.updateGithubOwnerStats, {
+      owner: args.owner,
+      page: page + 1,
     });
   },
 });
