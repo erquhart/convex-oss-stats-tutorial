@@ -1,9 +1,19 @@
-import { internalAction, internalMutation } from "./_generated/server";
+import { internalAction, internalMutation, query } from "./_generated/server";
 import { v } from "convex/values";
 import * as cheerio from "cheerio";
 import { internal } from "./_generated/api";
 import { asyncMap } from "convex-helpers";
 import pLimit from "p-limit";
+
+export const getGithubOwnerStats = query({
+  args: { owner: v.string() },
+  handler: async (ctx, args) => {
+    return ctx.db
+      .query("githubOwners")
+      .withIndex("name", (q) => q.eq("name", args.owner))
+      .unique();
+  },
+});
 
 const repoPageRetries = 3;
 
@@ -14,7 +24,7 @@ const getGithubRepoPageData = async (owner: string, name: string) => {
   let dependentCount: number | undefined;
   while (retries > 0) {
     const html = await fetch(`https://github.com/${owner}/${name}`).then(
-      (res) => res.text()
+      (res) => res.text(),
     );
     const $ = cheerio.load(html);
     const parseNumber = (str = "") => Number(str.replace(/,/g, ""));
@@ -50,7 +60,7 @@ export const updateGithubRepos = internalMutation({
         starCount: v.number(),
         contributorCount: v.number(),
         dependentCount: v.number(),
-      })
+      }),
     ),
   },
   handler: async (ctx, args) => {
@@ -58,7 +68,7 @@ export const updateGithubRepos = internalMutation({
       const existingRepo = await ctx.db
         .query("githubRepos")
         .withIndex("owner_name", (q) =>
-          q.eq("owner", repo.owner).eq("name", repo.name)
+          q.eq("owner", repo.owner).eq("name", repo.name),
         )
         .unique();
       if (
@@ -110,7 +120,7 @@ export const updateGithubOwner = internalMutation({
         contributorCount: acc.contributorCount + repo.contributorCount,
         dependentCount: acc.dependentCount + repo.dependentCount,
       }),
-      { starCount: 0, contributorCount: 0, dependentCount: 0 }
+      { starCount: 0, contributorCount: 0, dependentCount: 0 },
     );
 
     await ctx.db.patch(ownerId, {
@@ -134,7 +144,7 @@ export const updateGithubOwnerStats = internalAction({
         headers: {
           Authorization: `Bearer ${process.env.GITHUB_ACCESS_TOKEN}`,
         },
-      }
+      },
     );
     const repos: { name: string; stargazers_count: number }[] =
       await response.json();
@@ -179,7 +189,7 @@ export const updateNpmPackages = internalMutation({
         name: v.string(),
         downloadCount: v.number(),
         // dayOfWeekAverages: v.array(v.number()),
-      })
+      }),
     ),
   },
   handler: async (ctx, args) => {
@@ -214,7 +224,7 @@ const fetchNpmPackageListForOwner = async (owner: string, page: number) => {
         "cache-control": "no-cache",
         "x-spiferack": "1",
       },
-    }
+    },
   );
   const data: {
     packages?: {
@@ -251,7 +261,7 @@ const fetchNpmPackageDownloadCount = async (name: string, created: number) => {
     }
     const to = nextDate.toISOString().substring(0, 10);
     const response = await fetch(
-      `https://api.npmjs.org/downloads/range/${from}:${to}/${name}`
+      `https://api.npmjs.org/downloads/range/${from}:${to}/${name}`,
     );
     const pageData: {
       end: string;
@@ -259,7 +269,7 @@ const fetchNpmPackageDownloadCount = async (name: string, created: number) => {
     } = await response.json();
     const downloadCount = pageData.downloads.reduce(
       (acc: number, cur: { downloads: number }) => acc + cur.downloads,
-      0
+      0,
     );
     totalDownloadCount += downloadCount;
     nextDate.setDate(nextDate.getDate() + 1);
@@ -270,7 +280,7 @@ const fetchNpmPackageDownloadCount = async (name: string, created: number) => {
   nextDate.setDate(nextDate.getDate() + 30);
   const to = nextDate.toISOString().substring(0, 10);
   const lastPageResponse = await fetch(
-    `https://api.npmjs.org/downloads/range/${from}:${to}/${name}`
+    `https://api.npmjs.org/downloads/range/${from}:${to}/${name}`,
   );
   /*
       const lastPageData: {
@@ -310,7 +320,7 @@ export const updateNpmOwner = internalMutation({
       .collect();
     const downloadCount = packages.reduce(
       (acc, pkg) => acc + pkg.downloadCount,
-      0
+      0,
     );
     await ctx.db.patch(ownerId, {
       downloadCount,
@@ -327,12 +337,12 @@ export const updateNpmOwnerStats = internalAction({
     const page = args.page ?? 0;
     const { packages, hasMore } = await fetchNpmPackageListForOwner(
       args.owner,
-      page
+      page,
     );
     const packagesWithDownloadCount = await asyncMap(packages, async (pkg) => {
       const totalDownloadCount = await fetchNpmPackageDownloadCount(
         pkg.name,
-        pkg.created
+        pkg.created,
       );
       return {
         name: pkg.name,
