@@ -20,7 +20,8 @@
     "step-04": "cd steps/step-04 && npm run dev:backend",
     "step-05": "cd steps/step-05 && npm run dev:backend",
     "step-06": "cd steps/step-06 && npm run dev:backend",
-    "step-07": "cd steps/step-07 && shx cp convex.json ../../convex.json && shx cp ../../.env.local . && npm run step-dev steps/step-07"
+    "step-07": "cd steps/step-07 && shx cp convex.json ../../convex.json && shx cp ../../.env.local . && npm run step-dev steps/step-07",
+    "step-08": "cd steps/step-08 && shx cp convex.json ../../convex.json && shx cp ../../.env.local . && npm run step-dev steps/step-08"
   },
   "dependencies": {
     "cheerio": "^1.0.0",

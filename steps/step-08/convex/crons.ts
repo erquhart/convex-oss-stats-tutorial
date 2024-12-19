@@ -13,6 +13,8 @@ crons.hourly(
 crons.hourly(
   "update npm stats",
   { minuteUTC: 0 }, // At the top of every hour
-  internal.stats.updateNpmOwnerStats,
-  { owner: "tanstack" },
+  internal.stats.updateNpmOrgStats,
+  { org: "tanstack" },
 );
+
+export default crons;

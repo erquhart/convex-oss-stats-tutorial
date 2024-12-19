@@ -3,9 +3,9 @@ import { api } from "../convex/_generated/api";
 import { PropsWithChildren } from "react";
 
 const App = () => {
-  const owner = useQuery(api.stats.getOwnerStats, {
+  const owner = useQuery(api.stats.getStats, {
     githubOwner: "tanstack",
-    npmOwner: "tanstack",
+    npmOrg: "tanstack",
   });
   return (
     <Card>

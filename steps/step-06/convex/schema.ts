@@ -17,15 +17,15 @@ export default defineSchema({
   })
     .index("owner", ["owner"])
     .index("owner_name", ["owner", "name"]),
-  npmOwners: defineTable({
+  npmOrgs: defineTable({
     name: v.string(),
     downloadCount: v.number(),
   }).index("name", ["name"]),
   npmPackages: defineTable({
-    owner: v.string(),
+    org: v.string(),
     name: v.string(),
     downloadCount: v.number(),
   })
-    .index("owner", ["owner"])
+    .index("org", ["org"])
     .index("name", ["name"]),
 });

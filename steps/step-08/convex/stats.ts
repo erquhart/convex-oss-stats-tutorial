@@ -5,25 +5,58 @@ import { internal } from "./_generated/api";
 import { asyncMap } from "convex-helpers";
 import pLimit from "p-limit";
 
-export const getOwnerStats = query({
-  args: { githubOwner: v.string(), npmOwner: v.string() },
+export const getStats = query({
+  args: { githubOwner: v.string(), npmOrg: v.string() },
   handler: async (ctx, args) => {
-    const [githubOwner, npmOwner] = await Promise.all([
+    const [githubOwner, npmOrg] = await Promise.all([
       ctx.db
         .query("githubOwners")
         .withIndex("name", (q) => q.eq("name", args.githubOwner))
         .unique(),
       ctx.db
-        .query("npmOwners")
-        .withIndex("name", (q) => q.eq("name", args.npmOwner))
+        .query("npmOrgs")
+        .withIndex("name", (q) => q.eq("name", args.npmOrg))
         .unique(),
     ]);
     return {
-      downloadCount: npmOwner?.downloadCount,
+      downloadCount: npmOrg?.downloadCount,
       starCount: githubOwner?.starCount,
       contributorCount: githubOwner?.contributorCount,
       dependentCount: githubOwner?.dependentCount,
     };
+  },
+});
+
+/*
+ * Handler for Github stars webhook
+ */
+export const updateGithubRepoStars = internalMutation({
+  args: {
+    owner: v.string(),
+    name: v.string(),
+    starCount: v.number(),
+  },
+  handler: async (ctx, args) => {
+    const owner = await ctx.db
+      .query("githubOwners")
+      .withIndex("name", (q) => q.eq("name", args.owner))
+      .unique();
+    if (!owner) {
+      throw new Error(`Owner ${args.owner} not found`);
+    }
+    const repo = await ctx.db
+      .query("githubRepos")
+      .withIndex("owner_name", (q) =>
+        q.eq("owner", args.owner).eq("name", args.name),
+      )
+      .unique();
+    if (!repo) {
+      throw new Error(`Repo ${args.owner}/${args.name} not found`);
+    }
+    await ctx.db.patch(repo._id, { starCount: args.starCount });
+    await ctx.db.patch(owner._id, {
+      starCount: Math.max(0, owner.starCount - repo.starCount + args.starCount),
+    });
   },
 });
 
@@ -193,9 +226,9 @@ export const updateGithubOwnerStats = internalAction({
   },
 });
 
-export const updateNpmPackages = internalMutation({
+export const updateNpmPackagesForOrg = internalMutation({
   args: {
-    owner: v.string(),
+    org: v.string(),
     packages: v.array(
       v.object({
         name: v.string(),
@@ -220,7 +253,7 @@ export const updateNpmPackages = internalMutation({
         return;
       }
       await ctx.db.insert("npmPackages", {
-        owner: args.owner,
+        org: args.org,
         name: pkg.name,
         downloadCount: pkg.downloadCount,
       });
@@ -228,9 +261,9 @@ export const updateNpmPackages = internalMutation({
   },
 });
 
-const fetchNpmPackageListForOwner = async (owner: string, page: number) => {
+const fetchNpmPackageListForOrg = async (org: string, page: number) => {
   const response = await fetch(
-    `https://www.npmjs.com/org/${owner}?page=${page}`,
+    `https://www.npmjs.com/org/${org}?page=${page}`,
     {
       headers: {
         "cache-control": "no-cache",
@@ -239,6 +272,7 @@ const fetchNpmPackageListForOwner = async (owner: string, page: number) => {
     },
   );
   const data: {
+    scope: { type: "org" | "user" };
     packages?: {
       objects: { name: string; created: { ts: number } }[];
       urls: { next: string };
@@ -246,10 +280,13 @@ const fetchNpmPackageListForOwner = async (owner: string, page: number) => {
     message?: string;
   } = await response.json();
   if (!data.packages && data.message === "NotFoundError: Scope not found") {
-    throw new Error(`npm org ${owner} not found`);
+    throw new Error(`npm org ${org} not found`);
+  }
+  if (data.scope.type === "user") {
+    throw new Error(`${org} is a user, not an org`);
   }
   if (!data.packages) {
-    throw new Error(`no packages for ${owner}, page ${page}`);
+    throw new Error(`no packages for ${org}, page ${page}`);
   }
   return {
     packages: data.packages.objects.map((pkg) => ({
@@ -279,6 +316,7 @@ const fetchNpmPackageDownloadCount = async (name: string, created: number) => {
       end: string;
       downloads: { day: string; downloads: number }[];
     } = await response.json();
+    console.log(pageData);
     const downloadCount = pageData.downloads.reduce(
       (acc: number, cur: { downloads: number }) => acc + cur.downloads,
       0,
@@ -312,43 +350,41 @@ const fetchNpmPackageDownloadCount = async (name: string, created: number) => {
   return totalDownloadCount;
 };
 
-export const updateNpmOwner = internalMutation({
+export const updateNpmOrg = internalMutation({
   args: { name: v.string() },
   handler: async (ctx, args) => {
-    const ownerId =
+    const orgId =
       (
         await ctx.db
-          .query("npmOwners")
+          .query("npmOrgs")
           .withIndex("name", (q) => q.eq("name", args.name))
           .unique()
       )?._id ??
-      (await ctx.db.insert("npmOwners", {
+      (await ctx.db.insert("npmOrgs", {
         name: args.name,
         downloadCount: 0,
       }));
     const packages = await ctx.db
       .query("npmPackages")
-      .withIndex("owner", (q) => q.eq("owner", args.name))
+      .withIndex("org", (q) => q.eq("org", args.name))
       .collect();
     const downloadCount = packages.reduce(
       (acc, pkg) => acc + pkg.downloadCount,
       0,
     );
-    await ctx.db.patch(ownerId, {
-      downloadCount,
-    });
+    await ctx.db.patch(orgId, { downloadCount });
   },
 });
 
-export const updateNpmOwnerStats = internalAction({
+export const updateNpmOrgStats = internalAction({
   args: {
-    owner: v.string(),
+    org: v.string(),
     page: v.optional(v.number()),
   },
   handler: async (ctx, args) => {
     const page = args.page ?? 0;
-    const { packages, hasMore } = await fetchNpmPackageListForOwner(
-      args.owner,
+    const { packages, hasMore } = await fetchNpmPackageListForOrg(
+      args.org,
       page,
     );
     const packagesWithDownloadCount = await asyncMap(packages, async (pkg) => {
@@ -363,21 +399,21 @@ export const updateNpmOwnerStats = internalAction({
       };
     });
 
-    await ctx.runMutation(internal.stats.updateNpmPackages, {
-      owner: args.owner,
+    await ctx.runMutation(internal.stats.updateNpmPackagesForOrg, {
+      org: args.org,
       packages: packagesWithDownloadCount,
     });
 
     if (hasMore) {
-      await ctx.scheduler.runAfter(0, internal.stats.updateNpmOwnerStats, {
-        owner: args.owner,
+      await ctx.scheduler.runAfter(0, internal.stats.updateNpmOrgStats, {
+        org: args.org,
         page: page + 1,
       });
       return;
     }
 
-    await ctx.runMutation(internal.stats.updateNpmOwner, {
-      name: args.owner,
+    await ctx.runMutation(internal.stats.updateNpmOrg, {
+      name: args.org,
     });
   },
 });
