@@ -4,20 +4,23 @@
   "version": "0.0.0",
   "type": "module",
   "scripts": {
-    "dev": "npm-run-all --parallel \"dev:frontend -- {1}\" dev:backend --",
+    "dev": "npm-run-all --parallel dev:frontend dev:backend",
     "dev:frontend": "vite",
-    "dev:backend": "convex dev --tail-logs",
+    "dev:backend": "shx rm convex.json && convex dev --tail-logs",
     "build": "tsc -b && vite build",
     "lint": "tsc && eslint .  --ext ts,tsx --report-unused-disable-directives --max-warnings 0",
     "preview": "vite preview",
     "clear-db": "npx convex import --replace-all --table githubOwners --format jsonLines /dev/null -y",
+    "step-dev:frontend": "vite",
+    "step-dev:backend": "convex dev --tail-logs",
+    "step-dev": "npm-run-all --parallel \"step-dev:frontend -- {1}\" step-dev:backend --",
     "step-01": "cd steps/step-01 && npm run dev:backend",
     "step-02": "cd steps/step-02 && npm run dev:backend",
     "step-03": "cd steps/step-03 && npm run dev:backend",
     "step-04": "cd steps/step-04 && npm run dev:backend",
     "step-05": "cd steps/step-05 && npm run dev:backend",
     "step-06": "cd steps/step-06 && npm run dev:backend",
-    "step-07": "cd steps/step-07 && shx cp convex.json ../.. && shx cp ../../.env.local . && npm run dev steps/step-07"
+    "step-07": "cd steps/step-07 && shx cp convex.json ../../convex.json && shx cp ../../.env.local . && npm run step-dev steps/step-07"
   },
   "dependencies": {
     "cheerio": "^1.0.0",

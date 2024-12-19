@@ -23,5 +23,5 @@
     "noUnusedParameters": true,
     "noFallthroughCasesInSwitch": true,
   },
-  "include": ["src", "steps/step-07/src"]
+  "include": ["src", "steps/**/src"]
 }
