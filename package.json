@@ -15,6 +15,7 @@
     "step-dev:backend": "convex dev --tail-logs",
     "step-dev": "npm-run-all --parallel \"step-dev:frontend -- {1}\" step-dev:backend --",
     "step-01": "cd steps/step-01 && shx cp convex.json ../../convex.json && shx cp ../../.env.local . && npm run step-dev:backend",
+    "diff-01": "echo 'no diff for step 01'",
     "step-02": "cd steps/step-02 && shx cp convex.json ../../convex.json && shx cp ../../.env.local . && npm run step-dev:backend",
     "diff-02": "git diff --no-index steps/step-01 steps/step-02 --skip-to=steps/step-02/convex/schema.ts",
     "step-03": "cd steps/step-03 && shx cp convex.json ../../convex.json && shx cp ../../.env.local . && npm run step-dev:backend",
