@@ -269,28 +269,6 @@ const fetchNpmPackageDownloadCount = async (name: string, created: number) => {
     nextDate.setDate(nextDate.getDate() + 1);
     hasMore = pageData.end < currentDateIso;
   }
-  nextDate.setDate(nextDate.getDate() - 30);
-  const from = nextDate.toISOString().substring(0, 10);
-  nextDate.setDate(nextDate.getDate() + 30);
-  const to = nextDate.toISOString().substring(0, 10);
-  const lastPageResponse = await fetch(
-    `https://api.npmjs.org/downloads/range/${from}:${to}/${name}`,
-  );
-  /*
-      const lastPageData: {
-        end: string;
-        downloads: { day: string; downloads: number }[];
-      } = await lastPageResponse.json();
-      // Create array of week of day averages, 0 = Sunday
-      const dayOfWeekAverages = Array(7)
-        .fill(0)
-        .map((_, idx) => {
-          const total = lastPageData.downloads
-            .filter((day) => new Date(day.day).getDay() === idx)
-            .reduce((acc, cur) => acc + cur.downloads, 0);
-          return Math.round(total / 4);
-        });
-        */
   return totalDownloadCount;
 };
 

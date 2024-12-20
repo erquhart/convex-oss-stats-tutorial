@@ -19,6 +19,7 @@ export const getStats = query({
         .unique(),
     ]);
     return {
+      npmOrg: npmOrg,
       downloadCount: npmOrg?.downloadCount,
       starCount: githubOwner?.starCount,
       contributorCount: githubOwner?.contributorCount,
@@ -233,7 +234,7 @@ export const updateNpmPackagesForOrg = internalMutation({
       v.object({
         name: v.string(),
         downloadCount: v.number(),
-        // dayOfWeekAverages: v.array(v.number()),
+        dayOfWeekAverages: v.array(v.number()),
       }),
     ),
   },
@@ -249,6 +250,9 @@ export const updateNpmPackagesForOrg = internalMutation({
       if (existingPackage) {
         await ctx.db.patch(existingPackage._id, {
           downloadCount: pkg.downloadCount || existingPackage.downloadCount,
+          downloadCountUpdatedAt: Date.now(),
+          dayOfWeekAverages:
+            pkg.dayOfWeekAverages || existingPackage.dayOfWeekAverages,
         });
         return;
       }
@@ -256,6 +260,8 @@ export const updateNpmPackagesForOrg = internalMutation({
         org: args.org,
         name: pkg.name,
         downloadCount: pkg.downloadCount,
+        downloadCountUpdatedAt: Date.now(),
+        dayOfWeekAverages: pkg.dayOfWeekAverages,
       });
     });
   },
@@ -324,23 +330,52 @@ const fetchNpmPackageDownloadCount = async (name: string, created: number) => {
     nextDate.setDate(nextDate.getDate() + 1);
     hasMore = pageData.end < currentDateIso;
   }
-  return totalDownloadCount;
+  nextDate.setDate(nextDate.getDate() - 30);
+  const from = nextDate.toISOString().substring(0, 10);
+  nextDate.setDate(nextDate.getDate() + 30);
+  const to = nextDate.toISOString().substring(0, 10);
+  const lastPageResponse = await fetch(
+    `https://api.npmjs.org/downloads/range/${from}:${to}/${name}`,
+  );
+  const lastPageData: {
+    end: string;
+    downloads: { day: string; downloads: number }[];
+  } = await lastPageResponse.json();
+  // Create array of week of day averages, 0 = Sunday
+  const dayOfWeekAverages = Array(7)
+    .fill(0)
+    .map((_, idx) => {
+      const total = lastPageData.downloads
+        .filter((day) => new Date(day.day).getDay() === idx)
+        .slice(0, 4)
+        .reduce((acc, cur) => acc + cur.downloads, 0);
+      return Math.round(total / 4);
+    });
+  return {
+    totalDownloadCount,
+    dayOfWeekAverages,
+  };
 };
 
 export const updateNpmOrg = internalMutation({
   args: { name: v.string() },
   handler: async (ctx, args) => {
-    const orgId =
-      (
-        await ctx.db
-          .query("npmOrgs")
-          .withIndex("name", (q) => q.eq("name", args.name))
-          .unique()
-      )?._id ??
+    const existingOrg = await ctx.db
+      .query("npmOrgs")
+      .withIndex("name", (q) => q.eq("name", args.name))
+      .unique();
+    const newOrgId =
+      existingOrg?._id ??
       (await ctx.db.insert("npmOrgs", {
         name: args.name,
         downloadCount: 0,
+        downloadCountUpdatedAt: Date.now(),
+        dayOfWeekAverages: [],
       }));
+    const org = existingOrg || (await ctx.db.get(newOrgId));
+    if (!org) {
+      throw new Error(`npm org ${args.name} not found`);
+    }
     const packages = await ctx.db
       .query("npmPackages")
       .withIndex("org", (q) => q.eq("org", args.name))
@@ -349,7 +384,17 @@ export const updateNpmOrg = internalMutation({
       (acc, pkg) => acc + pkg.downloadCount,
       0,
     );
-    await ctx.db.patch(orgId, { downloadCount });
+    if (downloadCount === org.downloadCount) {
+      return;
+    }
+    await ctx.db.patch(org._id, {
+      downloadCount,
+      downloadCountUpdatedAt: Date.now(),
+      dayOfWeekAverages: packages.reduce(
+        (acc, pkg) => acc.map((val, idx) => val + pkg.dayOfWeekAverages[idx]),
+        Array(7).fill(0),
+      ),
+    });
   },
 });
 
@@ -365,14 +410,12 @@ export const updateNpmOrgStats = internalAction({
       page,
     );
     const packagesWithDownloadCount = await asyncMap(packages, async (pkg) => {
-      const totalDownloadCount = await fetchNpmPackageDownloadCount(
-        pkg.name,
-        pkg.created,
-      );
+      const { totalDownloadCount, dayOfWeekAverages } =
+        await fetchNpmPackageDownloadCount(pkg.name, pkg.created);
       return {
         name: pkg.name,
         downloadCount: totalDownloadCount,
-        // dayOfWeekAverages,
+        dayOfWeekAverages,
       };
     });
 
