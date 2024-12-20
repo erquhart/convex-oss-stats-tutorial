@@ -16,13 +16,21 @@
     "step-dev": "npm-run-all --parallel \"step-dev:frontend -- {1}\" step-dev:backend --",
     "step-01": "cd steps/step-01 && shx cp convex.json ../../convex.json && shx cp ../../.env.local . && npm run step-dev:backend",
     "step-02": "cd steps/step-02 && shx cp convex.json ../../convex.json && shx cp ../../.env.local . && npm run step-dev:backend",
+    "diff-02": "git diff --no-index steps/step-01 steps/step-02 --skip-to=steps/step-02/convex/schema.ts",
     "step-03": "cd steps/step-03 && shx cp convex.json ../../convex.json && shx cp ../../.env.local . && npm run step-dev:backend",
+    "diff-03": "git diff --no-index steps/step-02 steps/step-03 --skip-to=steps/step-03/convex/schema.ts",
     "step-04": "cd steps/step-04 && shx cp convex.json ../../convex.json && shx cp ../../.env.local . && npm run step-dev:backend",
+    "diff-04": "git diff --no-index steps/step-03 steps/step-04 --skip-to=steps/step-04/convex/schema.ts",
     "step-05": "cd steps/step-05 && shx cp convex.json ../../convex.json && shx cp ../../.env.local . && npm run step-dev:backend",
+    "diff-05": "git diff --no-index steps/step-04 steps/step-05 --skip-to=steps/step-05/convex/schema.ts",
     "step-06": "cd steps/step-06 && shx cp convex.json ../../convex.json && shx cp ../../.env.local . && npm run step-dev:backend",
+    "diff-06": "git diff --no-index steps/step-05 steps/step-06 --skip-to=steps/step-06/convex/schema.ts",
     "step-07": "cd steps/step-07 && shx cp convex.json ../../convex.json && shx cp ../../.env.local . && npm run step-dev steps/step-07",
+    "diff-07": "git diff --no-index steps/step-06 steps/step-07 --skip-to=steps/step-07/convex/schema.ts",
     "step-08": "cd steps/step-08 && shx cp convex.json ../../convex.json && shx cp ../../.env.local . && npm run step-dev steps/step-08",
-    "step-09": "cd steps/step-09 && shx cp convex.json ../../convex.json && shx cp ../../.env.local . && npm run step-dev steps/step-09"
+    "diff-08": "git diff --no-index steps/step-07 steps/step-08 --skip-to=steps/step-08/convex/schema.ts",
+    "step-09": "cd steps/step-09 && shx cp convex.json ../../convex.json && shx cp ../../.env.local . && npm run step-dev steps/step-09",
+    "diff-09": "git diff --no-index steps/step-08 steps/step-09 --skip-to=steps/step-09/convex/schema.ts"
   },
   "dependencies": {
     "@number-flow/react": "^0.4.4",
